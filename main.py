@@ -10,8 +10,8 @@ POSITION = Tuple[int, int]
 pygame.display.init()
 
 # Set the screen size to the current display size
-WIDTH = 500#pygame.display.Info().current_w - 100
-HEIGHT = 500#pygame.display.Info().current_h - 100
+WIDTH = pygame.display.Info().current_w - 100
+HEIGHT = pygame.display.Info().current_h - 100
 
 ROCK_TYPE = 0
 PAPER_TYPE = 1
@@ -33,8 +33,8 @@ BLUE = (0, 0, 255)
 REFRESH_RATE = 30
 
 
-NUM_OF_ELEMENTS = 30
-ELEMENT_SIZE = 30
+NUM_OF_ELEMENTS = 50
+ELEMENT_SIZE = 50
 ELEMENT_SPEED = ELEMENT_SIZE / 4
 
 
@@ -86,7 +86,6 @@ class ScreenObj:
     def __init__(self, image: str, pos: POSITION):
         self._image = pygame.transform.smoothscale(pygame.image.load(image), (ELEMENT_SIZE, ELEMENT_SIZE))
         self._rect = self._image.get_rect()
-        self._pos = pos
         self._rect.center = pos
 
     def draw(self, screen):
@@ -133,13 +132,12 @@ class ScreenElement(ScreenObj):
         return self._rect.colliderect(element.rect)
 
     def _update_pos(self, angle):
-        x, y = self._pos
+        x, y = self._rect.center
         x += math.cos(angle) * ELEMENT_SPEED
         y += math.sin(angle) * ELEMENT_SPEED
         x = min(max(0, x), WIDTH)
         y = min(max(0, y), HEIGHT)
-        self._pos = (x, y)
-        self._rect.center = self._pos
+        self._rect.center = (x, y)
 
     @property
     def pos(self):
@@ -197,16 +195,16 @@ def check_for_win(elements):
     return ''
 
 
-# def create_video(screen, video_writer):
-#     success = False
-#     while not success:
-#         try:
-#             pygame.image.save(screen, 'screenshot.png')
-#             image = cv2.imread("screenshot.png")
-#             video_writer.write(image)
-#             success = True
-#         except pygame.error:
-#             print('error')
+def create_video(screen, video_writer):
+    success = False
+    while not success:
+        try:
+            pygame.image.save(screen, 'screenshot.png')
+            image = cv2.imread("screenshot.png")
+            video_writer.write(image)
+            success = True
+        except pygame.error:
+            print('error')
 
 
 def main():

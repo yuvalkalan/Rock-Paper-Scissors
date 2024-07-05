@@ -10,8 +10,8 @@ POSITION = Tuple[int, int]
 pygame.display.init()
 
 # Set the screen size to the current display size
-WIDTH = pygame.display.Info().current_w - 100
-HEIGHT = pygame.display.Info().current_h - 100
+WIDTH = 1000#pygame.display.Info().current_w - 100
+HEIGHT = 500#pygame.display.Info().current_h - 100
 
 ROCK_TYPE = 0
 PAPER_TYPE = 1
@@ -34,8 +34,12 @@ REFRESH_RATE = 30
 
 
 NUM_OF_ELEMENTS = 50
-ELEMENT_SIZE = 50
+ELEMENT_SIZE = 30
 ELEMENT_SPEED = ELEMENT_SIZE / 4
+
+GRAVITY_CONSTANT = 300
+
+ARROW_HEAD_LENGTH = 3
 
 
 class Vector:
@@ -71,21 +75,40 @@ class Vector:
         return cls(x, y)
 
     @classmethod
-    def center_vector(cls, pos, vectors):
-        sizes = [vector.size for vector in vectors]
-        avg_size = sum(sizes)
+    def center_vector(cls, pos):
+        avg_size = GRAVITY_CONSTANT * min(NUM_OF_ELEMENTS/3, 10)
         x1, y1 = WIDTH // 2, HEIGHT // 2
         x2, y2 = pos
         d = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
-        radius = - 2 * avg_size * (d / WIDTH) ** 2
+        radius = - avg_size * (d / (WIDTH * HEIGHT)) ** 2
         a = math.atan2(y2 - y1, x2 - x1)
         return cls.from_radius_and_angle(radius, a)
+
+    def draw(self, screen, pos, color=WHITE):
+        start_x, start_y = pos
+        end_x, end_y = start_x + self._x*100000, start_y + self._y*100000
+        # Calculate the direction of the vector
+        length = math.sqrt((end_x-start_x) ** 2 + (end_y-start_y) ** 2)
+        if length > ARROW_HEAD_LENGTH:
+            # Normalize the vector
+            dx = (end_x-start_x) / length
+            dy = (end_y-start_y) / length
+            # Calculate the points of the arrowhead
+            arrowhead_left = (end_x - ARROW_HEAD_LENGTH * dx + ARROW_HEAD_LENGTH * dy,
+                              end_y - ARROW_HEAD_LENGTH * dy - ARROW_HEAD_LENGTH * dx)
+            arrowhead_right = (end_x - ARROW_HEAD_LENGTH * dx - ARROW_HEAD_LENGTH * dy,
+                               end_y - ARROW_HEAD_LENGTH * dy + ARROW_HEAD_LENGTH * dx)
+            # Draw the vector
+            pygame.draw.line(screen, color, (start_x, start_y), (end_x, end_y), 1)
+            # Draw the arrowhead
+            pygame.draw.polygon(screen, color, [(end_x, end_y), arrowhead_left, arrowhead_right])
 
 
 class ScreenObj:
     def __init__(self, image: str, pos: POSITION):
         self._image = pygame.transform.smoothscale(pygame.image.load(image), (ELEMENT_SIZE, ELEMENT_SIZE))
         self._rect = self._image.get_rect()
+        self._pos = pos
         self._rect.center = pos
 
     def draw(self, screen):
@@ -95,6 +118,9 @@ class ScreenObj:
 class ScreenElement(ScreenObj):
     def __init__(self, my_type, pos):
         super(ScreenElement, self).__init__(IMAGES[my_type], pos)
+        self._vectors = []
+        self._sum_vector = Vector(0, 0)
+        self._center_vector = Vector(0, 0)
 
     def update(self, elements):
         vectors = []
@@ -114,7 +140,10 @@ class ScreenElement(ScreenObj):
         sum_vector = Vector(0, 0)
         for vector in vectors:
             sum_vector += vector
-        sum_vector += Vector.center_vector(self.pos, vectors)
+        self._center_vector = Vector.center_vector(self.pos)
+        sum_vector += self._center_vector
+        self._vectors = vectors
+        self._sum_vector = sum_vector
         self._update_pos(sum_vector.angle)
         if self.is_touch_master(elements):
             return SLAVES[type(self)](self.pos)
@@ -132,12 +161,13 @@ class ScreenElement(ScreenObj):
         return self._rect.colliderect(element.rect)
 
     def _update_pos(self, angle):
-        x, y = self._rect.center
+        x, y = self._pos
         x += math.cos(angle) * ELEMENT_SPEED
         y += math.sin(angle) * ELEMENT_SPEED
         x = min(max(0, x), WIDTH)
         y = min(max(0, y), HEIGHT)
-        self._rect.center = (x, y)
+        self._pos = (x, y)
+        self._rect.center = self._pos
 
     @property
     def pos(self):
@@ -152,11 +182,18 @@ class ScreenElement(ScreenObj):
         x2, y2 = element.pos
         d = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
         try:
-            radius = (-slaves / (masters+0.001) if is_slave else masters / (slaves+0.001)) / d ** 2
+            radius = (-slaves / (masters+0.01) if is_slave else masters / (slaves+0.01)) / d ** 2
         except ZeroDivisionError:
             radius = 0
         angle = math.atan2(y2 - y1, x2 - x1)
         return Vector.from_radius_and_angle(radius, angle)
+
+    def draw(self, screen):
+        super(ScreenElement, self).draw(screen)
+        # for vector in self._vectors:
+        #     vector.draw(screen, self.pos)
+        # self._sum_vector.draw(screen, self.pos, GREEN)
+        self._center_vector.draw(screen, self.pos, RED)
 
 
 class Rock(ScreenElement):
@@ -195,16 +232,16 @@ def check_for_win(elements):
     return ''
 
 
-def create_video(screen, video_writer):
-    success = False
-    while not success:
-        try:
-            pygame.image.save(screen, 'screenshot.png')
-            image = cv2.imread("screenshot.png")
-            video_writer.write(image)
-            success = True
-        except pygame.error:
-            print('error')
+# def create_video(screen, video_writer):
+#     success = False
+#     while not success:
+#         try:
+#             pygame.image.save(screen, 'screenshot.png')
+#             image = cv2.imread("screenshot.png")
+#             video_writer.write(image)
+#             success = True
+#         except pygame.error:
+#             print('error')
 
 
 def main():
@@ -227,11 +264,11 @@ def main():
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
+            screen.fill(BLACK)
             elements = [element.update(elements) for element in elements]
             winner = check_for_win(elements)
             if winner:
                 running = False
-            screen.fill(BLACK)
             for element in elements:
                 element.draw(screen)
             pygame.display.flip()

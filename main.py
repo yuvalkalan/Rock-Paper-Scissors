@@ -10,8 +10,8 @@ POSITION = Tuple[int, int]
 pygame.display.init()
 
 # Set the screen size to the current display size
-WIDTH = 1000#pygame.display.Info().current_w - 100
-HEIGHT = 500#pygame.display.Info().current_h - 100
+HEIGHT = pygame.display.Info().current_h - 100
+WIDTH = HEIGHT  #pygame.display.Info().current_w - 100
 
 ROCK_TYPE = 0
 PAPER_TYPE = 1
@@ -36,8 +36,6 @@ REFRESH_RATE = 30
 NUM_OF_ELEMENTS = 50
 ELEMENT_SIZE = 30
 ELEMENT_SPEED = ELEMENT_SIZE / 4
-
-GRAVITY_CONSTANT = 300
 
 ARROW_HEAD_LENGTH = 3
 
@@ -75,12 +73,13 @@ class Vector:
         return cls(x, y)
 
     @classmethod
-    def center_vector(cls, pos):
-        avg_size = GRAVITY_CONSTANT * min(NUM_OF_ELEMENTS/3, 10)
+    def center_vector(cls, pos, vectors):
+        sizes = [vector.size for vector in vectors]
+        avg_size = sum(sizes)
         x1, y1 = WIDTH // 2, HEIGHT // 2
         x2, y2 = pos
-        d = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
-        radius = - avg_size * (d / (WIDTH * HEIGHT)) ** 2
+        d = ((x2 - x1) ** 2 + (y2 - y1) ** 2)
+        radius = - 2 * avg_size * d / (WIDTH * HEIGHT)
         a = math.atan2(y2 - y1, x2 - x1)
         return cls.from_radius_and_angle(radius, a)
 
@@ -140,7 +139,7 @@ class ScreenElement(ScreenObj):
         sum_vector = Vector(0, 0)
         for vector in vectors:
             sum_vector += vector
-        self._center_vector = Vector.center_vector(self.pos)
+        self._center_vector = Vector.center_vector(self.pos, vectors)
         sum_vector += self._center_vector
         self._vectors = vectors
         self._sum_vector = sum_vector
@@ -192,7 +191,7 @@ class ScreenElement(ScreenObj):
         super(ScreenElement, self).draw(screen)
         # for vector in self._vectors:
         #     vector.draw(screen, self.pos)
-        # self._sum_vector.draw(screen, self.pos, GREEN)
+        self._sum_vector.draw(screen, self.pos, GREEN)
         self._center_vector.draw(screen, self.pos, RED)
 
 

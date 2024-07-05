@@ -1,13 +1,13 @@
+import datetime
 import math
-
 import pygame
 import random
 from typing import *
 
 POSITION = Tuple[int, int]
 
-WIDTH = 600
-HEIGHT = WIDTH
+WIDTH = 1000
+HEIGHT = WIDTH // 2
 
 ROCK_TYPE = 0
 PAPER_TYPE = 1
@@ -26,10 +26,10 @@ RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
 # clock:
-REFRESH_RATE = 60
+REFRESH_RATE = 30
 
 
-NUM_OF_ELEMENTS = 50
+NUM_OF_ELEMENTS = 40
 ELEMENT_SIZE = 20
 ELEMENT_SPEED = ELEMENT_SIZE / 4
 
@@ -66,6 +66,15 @@ class Vector:
         y = r * math.sin(theta)
         return cls(x, y)
 
+    @classmethod
+    def center_vector(cls, pos):
+        x1, y1 = WIDTH // 2, HEIGHT // 2
+        x2, y2 = pos
+        d = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
+        radius = (- d**4 / (WIDTH * HEIGHT + d**4)) / 1000
+        a = math.atan2(y2 - y1, x2 - x1)
+        return cls.from_radius_and_angle(radius, a)
+
 
 class ScreenObj:
     def __init__(self, image: str, pos: POSITION):
@@ -83,14 +92,24 @@ class ScreenElement(ScreenObj):
 
     def update(self, elements):
         vectors = []
+        masters, slaves, friends = 0, 0, 0
+        for element in elements:
+            if type(element) == MASTERS[type(self)]:
+                masters += 1
+            elif type(element) == SLAVES[type(self)]:
+                slaves += 1
+            else:
+                friends += 1
         for element in elements:
             if type(element) == SLAVES[type(self)]:
-                vectors.append(self.calculate_vector(element, True))
+                vectors.append(self.calculate_vector(element, True, masters, slaves, friends))
             elif type(element) == MASTERS[type(self)]:
-                vectors.append(self.calculate_vector(element, False))
+                vectors.append(self.calculate_vector(element, False, masters, slaves, friends))
         sum_vector = Vector(0, 0)
         for vector in vectors:
             sum_vector += vector
+        sum_vector += Vector.center_vector(self.pos)
+        # print(sum_vector.size)
         self._update_pos(sum_vector.angle)
         if self.is_touch_master(elements):
             return SLAVES[type(self)](self.pos)
@@ -113,8 +132,6 @@ class ScreenElement(ScreenObj):
         y += math.sin(angle) * ELEMENT_SPEED
         x = min(max(0, x), WIDTH)
         y = min(max(0, y), HEIGHT)
-        if (x, y) == self.pos and 0 < x < WIDTH and 0 < y < HEIGHT:
-            print('here')
         self._rect.center = (x, y)
 
     @property
@@ -125,12 +142,12 @@ class ScreenElement(ScreenObj):
     def rect(self):
         return self._rect
 
-    def calculate_vector(self, element, is_slave):
+    def calculate_vector(self, element, is_slave, masters, slaves, friends):
         x1, y1 = self.pos
         x2, y2 = element.pos
         d = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
         try:
-            radius = 0.1 * (-1 if is_slave else 1) / d ** 2
+            radius = (-slaves / (masters+0.001) if is_slave else masters / (slaves+0.001)) / d ** 2
         except ZeroDivisionError:
             radius = 0
         angle = math.atan2(y2 - y1, x2 - x1)
@@ -183,6 +200,7 @@ def main():
     elements += [Scissors() for _ in range(NUM_OF_ELEMENTS)]
     running = True
     winner = ''
+    a = datetime.datetime.now()
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -196,6 +214,7 @@ def main():
             element.draw(screen)
         pygame.display.flip()
         clock.tick(REFRESH_RATE)
+    print(datetime.datetime.now() - a)
     if winner:
         print(f'the winner is {winner}')
 

@@ -3,11 +3,15 @@ import math
 import pygame
 import random
 from typing import *
+import cv2
 
 POSITION = Tuple[int, int]
 
-WIDTH = 1000
-HEIGHT = WIDTH // 2
+pygame.display.init()
+
+# Set the screen size to the current display size
+WIDTH = 500#pygame.display.Info().current_w - 100
+HEIGHT = 500#pygame.display.Info().current_h - 100
 
 ROCK_TYPE = 0
 PAPER_TYPE = 1
@@ -29,8 +33,8 @@ BLUE = (0, 0, 255)
 REFRESH_RATE = 30
 
 
-NUM_OF_ELEMENTS = 40
-ELEMENT_SIZE = 20
+NUM_OF_ELEMENTS = 30
+ELEMENT_SIZE = 30
 ELEMENT_SPEED = ELEMENT_SIZE / 4
 
 
@@ -67,11 +71,13 @@ class Vector:
         return cls(x, y)
 
     @classmethod
-    def center_vector(cls, pos):
+    def center_vector(cls, pos, vectors):
+        sizes = [vector.size for vector in vectors]
+        avg_size = sum(sizes)
         x1, y1 = WIDTH // 2, HEIGHT // 2
         x2, y2 = pos
         d = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
-        radius = (- d**4 / (WIDTH * HEIGHT + d**4)) / 1000
+        radius = - 2 * avg_size * (d / WIDTH) ** 2
         a = math.atan2(y2 - y1, x2 - x1)
         return cls.from_radius_and_angle(radius, a)
 
@@ -80,6 +86,7 @@ class ScreenObj:
     def __init__(self, image: str, pos: POSITION):
         self._image = pygame.transform.smoothscale(pygame.image.load(image), (ELEMENT_SIZE, ELEMENT_SIZE))
         self._rect = self._image.get_rect()
+        self._pos = pos
         self._rect.center = pos
 
     def draw(self, screen):
@@ -92,24 +99,23 @@ class ScreenElement(ScreenObj):
 
     def update(self, elements):
         vectors = []
-        masters, slaves, friends = 0, 0, 0
+        masters, slaves = 0, 0
         for element in elements:
             if type(element) == MASTERS[type(self)]:
                 masters += 1
             elif type(element) == SLAVES[type(self)]:
                 slaves += 1
-            else:
-                friends += 1
         for element in elements:
             if type(element) == SLAVES[type(self)]:
-                vectors.append(self.calculate_vector(element, True, masters, slaves, friends))
+                vectors.append(self.calculate_vector(element, True, masters, slaves))
             elif type(element) == MASTERS[type(self)]:
-                vectors.append(self.calculate_vector(element, False, masters, slaves, friends))
+                vectors.append(self.calculate_vector(element, False, masters, slaves))
+            elif type(element) == type(self):
+                vectors.append(self.calculate_vector(element, True, NUM_OF_ELEMENTS, NUM_OF_ELEMENTS))
         sum_vector = Vector(0, 0)
         for vector in vectors:
             sum_vector += vector
-        sum_vector += Vector.center_vector(self.pos)
-        # print(sum_vector.size)
+        sum_vector += Vector.center_vector(self.pos, vectors)
         self._update_pos(sum_vector.angle)
         if self.is_touch_master(elements):
             return SLAVES[type(self)](self.pos)
@@ -127,12 +133,13 @@ class ScreenElement(ScreenObj):
         return self._rect.colliderect(element.rect)
 
     def _update_pos(self, angle):
-        x, y = self._rect.center
+        x, y = self._pos
         x += math.cos(angle) * ELEMENT_SPEED
         y += math.sin(angle) * ELEMENT_SPEED
         x = min(max(0, x), WIDTH)
         y = min(max(0, y), HEIGHT)
-        self._rect.center = (x, y)
+        self._pos = (x, y)
+        self._rect.center = self._pos
 
     @property
     def pos(self):
@@ -142,7 +149,7 @@ class ScreenElement(ScreenObj):
     def rect(self):
         return self._rect
 
-    def calculate_vector(self, element, is_slave, masters, slaves, friends):
+    def calculate_vector(self, element, is_slave, masters, slaves):
         x1, y1 = self.pos
         x2, y2 = element.pos
         d = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
@@ -190,33 +197,55 @@ def check_for_win(elements):
     return ''
 
 
+# def create_video(screen, video_writer):
+#     success = False
+#     while not success:
+#         try:
+#             pygame.image.save(screen, 'screenshot.png')
+#             image = cv2.imread("screenshot.png")
+#             video_writer.write(image)
+#             success = True
+#         except pygame.error:
+#             print('error')
+
+
 def main():
     pygame.init()
     clock = pygame.time.Clock()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
-    elements: List[ScreenElement] = []
-    elements += [Rock() for _ in range(NUM_OF_ELEMENTS)]
-    elements += [Paper() for _ in range(NUM_OF_ELEMENTS)]
-    elements += [Scissors() for _ in range(NUM_OF_ELEMENTS)]
     running = True
-    winner = ''
-    a = datetime.datetime.now()
+    index = 0
     while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
+        winner = ''
+        loop_counter = 0
+        elements: List[ScreenElement] = []
+        elements += [Rock() for _ in range(NUM_OF_ELEMENTS)]
+        elements += [Paper() for _ in range(NUM_OF_ELEMENTS)]
+        elements += [Scissors() for _ in range(NUM_OF_ELEMENTS)]
+        # fourcc = cv2.VideoWriter_fourcc(*"MJPG")
+        # video_writer = cv2.VideoWriter(f"video{index}.avi", fourcc, 30.0, (WIDTH, HEIGHT))
+        a = datetime.datetime.now()
+        while running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+            elements = [element.update(elements) for element in elements]
+            winner = check_for_win(elements)
+            if winner:
                 running = False
-        elements = [element.update(elements) for element in elements]
-        winner = check_for_win(elements)
+            screen.fill(BLACK)
+            for element in elements:
+                element.draw(screen)
+            pygame.display.flip()
+            # create_video(screen, video_writer)
+            loop_counter += 1
+            clock.tick(REFRESH_RATE)
+        print(datetime.datetime.now() - a)
         if winner:
-            running = False
-        screen.fill(BLACK)
-        for element in elements:
-            element.draw(screen)
-        pygame.display.flip()
-        clock.tick(REFRESH_RATE)
-    print(datetime.datetime.now() - a)
-    if winner:
-        print(f'the winner is {winner}')
+            print(f'the winner is {winner}, {loop_counter}')
+            running = True
+        # video_writer.release()
+        index += 1
 
 
 if __name__ == '__main__':
